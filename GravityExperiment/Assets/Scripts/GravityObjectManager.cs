@@ -56,6 +56,7 @@ public class GravityObjectManager : MonoBehaviour {
         if (dirty) {
             dirty = false;
             datasetChanged.Invoke();
+            print("Dataset changed");
         }
         Vector3 avgPosition = Vector3.zero;
         foreach (GravityObject gravObj in managedObjects) {
