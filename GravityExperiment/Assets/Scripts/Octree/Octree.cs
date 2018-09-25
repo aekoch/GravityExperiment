@@ -74,6 +74,8 @@ public class Octree : MonoBehaviour {
         }
         root.transforms = new List<Transform>(data);
         root.octree = this;
+        root.center = GetCenter();
+        root.radius = GetBoundingRadius();
         root.MergeOrSubdivide();
     }
 
@@ -87,7 +89,7 @@ public class Octree : MonoBehaviour {
             root.MergeOrSubdivide();
             root.GatherDebugData();
         }
-        
+        //print("Cells in pool: " + Cell.pool.Count);
     }
 
     public float GetBoundingRadius() {

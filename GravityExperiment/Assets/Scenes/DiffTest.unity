@@ -278,9 +278,9 @@ MonoBehaviour:
   defaultColor: {r: 0.2830189, g: 0.2763439, b: 0.2763439, a: 1}
   maxParticlesPerCell: 50
   maxDepth: 10
-  threshold: 51
+  threshold: 0
   showOctree: 1
-  forceShowAllCells: 0
+  forceShowAllCells: 1
   cellCount: 0
   cellCountAtDepth: 
   dataCount: 0

@@ -127,14 +127,15 @@ public class Cell {
     public Cell parent;
     public Cell[] children;
     public List<Transform> transforms;
+    public bool active = true;
 
     private bool isRoot = false;
     private bool isStem = false;
     private bool isLeaf = false;
 
     #region Instance Management
-    private static Queue<Cell> pool;
-    private static int cellInstances = 0;
+    public static Queue<Cell> pool;
+    public static int cellInstances = 0;
 
     public Cell() {
         if(pool == null) { pool = new Queue<Cell>(); }
@@ -143,14 +144,19 @@ public class Cell {
     }
 
     public Cell RecycleOrCreateCell() {
-        Debug.Log(pool.Count);
+        //Debug.Log(pool.Count);
+        Cell result;
         if(pool.Count > 0) {
-            Debug.Log("Recycled");
-            return pool.Dequeue();
+            result = pool.Dequeue();
         } else {
-            Debug.Log("Created new");
-            return new Cell();
+            result = new Cell();
         }
+        result.parent = null;
+        result.children = null;
+        result.transforms = (result.transforms == null) ? new List<Transform>() : result.transforms;
+        result.active = true;
+
+        return result;
     }
 
     public void Deallocate() {
@@ -160,6 +166,8 @@ public class Cell {
             }
         }
         transforms.Clear();
+        children = null;
+        active = false;
         if(this != octree.root) {
             pool.Enqueue(this);
         }
@@ -186,23 +194,25 @@ public class Cell {
     public void MergeOrSubdivide() {
         if(children != null) {
             for(int i = 0; i < 8; i++) {
-                children[i].MergeOrSubdivide();
+                if(children != null) {
+                    children[i].MergeOrSubdivide();
+                }
             }
         } else {
             if (ShouldSubdivide()) {
                 Subdivide();
-            } else if (ShouldMerge()) {
-                //Merge();
+            } else if (parent != null && ShouldMergeSiblings()) {
+                parent.MergeChildren();
             }
         }
     }
 
     public void RedistributeRecursive() {
         if (children != null) {
-            for (int i = 0; i < 8; i++) {
+            for (int i = 0; i < 8; i++) { //Recurse until leaf node
                 children[i].RedistributeRecursive();
             }
-        } if(transforms.Count != 0) {
+        } if(transforms.Count != 0) { //Any cell that contains data (not just leaf nodes) should attempt to redistribute
             for (int i = transforms.Count - 1; i >= 0; i--) {
                 Redistribute(transforms[i]);
             }
@@ -213,18 +223,17 @@ public class Cell {
 
     #region Redistribution
     public void Redistribute(Transform t) {
-        //Debug.Log("Distributing transform at " + t.position);
         if (InBounds(t.position) && children == null) {
-            //Debug.Log(t.position + " should stay in current cell");
             return;
         } 
         else {
-            Debug.Log("Transform should change cells");
             Cell cell = this;
+            
             //Roll up
             while (cell.parent != null && !cell.InBounds(t.position)) {
                 cell = cell.parent;
             }
+            
             //Roll down
             bool shouldBreak = false;
             while (cell.children != null && !shouldBreak) {
@@ -237,16 +246,13 @@ public class Cell {
                     }
                 }
                 if (shouldBreak) {
-                    Debug.Log("Could not distribute transform at depth " + depth + " and position " + t.position);
+                    Debug.Log("Failed to distribute particle");
+                    //Debug.Log("Could not distribute transform at depth " + depth + " and position " + t.position);
+                    return;
                 }
             }
             if (cell == null) {
-                Debug.DrawLine(Vector3.zero, t.position, Color.red, 1000000);
-                Debug.Log("Could not redistribute transform" + t.position);
-                Debug.Log(t.position.magnitude + " ??? " + octree.boundingRadius);
-            }
-            if (t == null) {
-                Debug.Log("Transform does not exist");
+                return;
             }
             this.transforms.Remove(t);
             cell.transforms.Add(t);
@@ -283,8 +289,8 @@ public class Cell {
         if(depth > octree.maxDepth) { return; }
         children = new Cell[8];
         for (int i = 0; i < 8; i++) {
-            //Cell child = RecycleOrCreateCell();
-            Cell child = new Cell();
+            Cell child = RecycleOrCreateCell();
+            //Cell child = new Cell();
             child.octree = octree;
             child.parent = this;
             child.vertexInParent = (Vertex)i;
@@ -308,20 +314,34 @@ public class Cell {
 
     #region Merging
 
-    private bool ShouldMerge() {
+    private bool ShouldMergeSiblings() {
         if(vertexInParent != 0) {
             return false;
         } else {
             int siblingDataCount = 0;
             for(int i = 0; i < 8; i++) {
                 siblingDataCount += parent.children[i].transforms.Count;
+                if(siblingDataCount > octree.maxParticlesPerCell || parent.children[i].children != null) {
+                    return false;
+                }
             }
         }
-        return false;
+        return true;
     }
 
-    private void Merge() {
-        
+    private void MergeChildren() {
+        for(int i = 0; i < 8; i++) {
+            Cell child = children[i];
+            for(int j = 0; j < child.transforms.Count; j++) {
+                transforms.Add(child.transforms[j]);
+                octree.cellByTransform[child.transforms[j]] = this;
+            }
+            child.Deallocate();
+        }
+        children = null;
+        if (parent != null && parent.children[0].ShouldMergeSiblings()) {
+            //parent.MergeChildren();
+        }
     }
     #endregion
 
